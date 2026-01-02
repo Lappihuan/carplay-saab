@@ -23,7 +23,13 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "buffer": "^6.0.3",
     "electron-updater": "^6.3.9",
+    "node-carplay": "^4.1.0",
+    "pinia": "^3.0.4",
+    "socketmost": "3.0.1-alpha.87",
+    "stream-browserify": "^3.0.0",
+    "vue-router": "^4.6.4",
     "vuetify": "^3.11.6"
   },
   "devDependencies": {
@@ -47,9 +53,14 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@serialport/bindings-cpp",
       "electron",
       "electron-winstaller",
-      "esbuild"
+      "epoll",
+      "esbuild",
+      "spi-device",
+      "unix-dgram",
+      "usb"
     ]
   }
 }

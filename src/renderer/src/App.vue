@@ -1,43 +1,90 @@
 <script setup lang="ts">
-import { mdiAccount } from '@mdi/js'
-import Versions from './components/Versions.vue'
+import { onMounted, ref } from 'vue'
+import { useCarplayStore, useStatusStore } from './stores/carplayStore'
+import Nav from './components/Nav.vue'
+import Camera from './components/Camera.vue'
 
-const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
+const carplayStore = useCarplayStore()
+const statusStore = useStatusStore()
+
+const receivingVideo = ref(false)
+const commandCounter = ref(0)
+const keyCommand = ref('')
+
+onMounted(() => {
+  carplayStore.loadSettings()
+
+  // Listen for settings updates from main process
+  window.electron?.ipcRenderer?.on('settings', (_, settings) => {
+    carplayStore.setSettings(settings)
+  })
+
+  window.electron?.ipcRenderer?.on('settings-updated', (_, settings) => {
+    carplayStore.setSettings(settings)
+  })
+
+  window.electron?.ipcRenderer?.on('reverse', () => {
+    statusStore.setReverse(true)
+  })
+
+  // Setup keyboard listeners
+  document.addEventListener('keydown', onKeyDown)
+})
+
+const onKeyDown = (event: KeyboardEvent) => {
+  if (!carplayStore.settings) return
+
+  if (Object.values(carplayStore.settings.bindings).includes(event.code)) {
+    const action = Object.keys(carplayStore.settings.bindings).find(
+      (key) => carplayStore.settings!.bindings[key] === event.code
+    )
+
+    if (action) {
+      keyCommand.value = action
+      commandCounter.value++
+
+      if (action === 'selectDown') {
+        setTimeout(() => {
+          keyCommand.value = 'selectUp'
+          commandCounter.value++
+        }, 200)
+      }
+    }
+  }
+}
+
+const handleReverseClose = () => {
+  statusStore.setReverse(false)
+}
 </script>
 
 <template>
-  <v-app id="inspire">
-    <v-navigation-drawer class="pt-4" color="grey-lighten-3" model-value rail>
-      <v-avatar
-        v-for="n in 6"
-        :key="n"
-        :color="`grey-${n === 1 ? 'darken' : 'lighten'}-1`"
-        :size="n === 1 ? 36 : 20"
-        class="d-block text-center mx-auto mb-9"
-        :icon="mdiAccount"
-      ></v-avatar>
-    </v-navigation-drawer>
+  <v-app id="carplay-app">
+    <Nav :receiving-video="receivingVideo" :settings="carplayStore.settings" />
 
     <v-main>
-      <!--  -->
+      <router-view
+        :key="$route.fullPath"
+        :receiving-video="receivingVideo"
+        :settings="carplayStore.settings"
+        :command="keyCommand"
+        :command-counter="commandCounter"
+        @update:receiving-video="(v) => (receivingVideo = v)"
+      />
     </v-main>
+
+    <!-- Reverse camera modal -->
+    <v-dialog v-model="statusStore.reverse" fullscreen @update:model-value="handleReverseClose">
+      <div class="d-flex" style="height: 100%; width: 100%">
+        <Camera v-if="carplayStore.settings" :settings="carplayStore.settings" />
+      </div>
+    </v-dialog>
   </v-app>
-  <img alt="logo" class="logo" src="./assets/electron.svg" />
-  <div class="creator">Powered by electron-vite</div>
-  <div class="text">
-    Build an Electron app with
-    <span class="vue">Vue</span>
-    and
-    <span class="ts">TypeScript</span>
-  </div>
-  <p class="tip">Please try pressing <code>F12</code> to open the devTool</p>
-  <div class="actions">
-    <div class="action">
-      <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">Documentation</a>
-    </div>
-    <div class="action">
-      <a target="_blank" rel="noreferrer" @click="ipcHandle">Send IPC</a>
-    </div>
-  </div>
-  <Versions />
 </template>
+
+<style scoped>
+#carplay-app {
+  height: 100vh;
+  width: 100%;
+}
+</style>

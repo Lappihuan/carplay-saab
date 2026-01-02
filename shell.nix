@@ -5,6 +5,8 @@
 
   # everything you need at runtime AND to compile native modules:
   targetPkgs = p: [
+    p.python3
+
     p.libxcrypt-legacy
     p.zlib
     p.binutils
