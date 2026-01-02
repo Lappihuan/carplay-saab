@@ -8,7 +8,38 @@
     p.libxcrypt-legacy
     p.zlib
     p.binutils
-  ];
+
+    p.glib
+    p.nspr
+    p.nss
+    p.dbus
+    p.atk
+    p.cups
+    p.cairo
+    p.gtk3
+    p.pango
+    p.libgbm
+    p.expat
+    p.libxkbcommon
+    p.systemd
+    p.alsa-lib
+    p.libGL
+
+  ] ++ (with p.xorg; [
+    libXScrnSaver
+    libXrender
+    libXcursor
+    libXdamage
+    libXext
+    libXfixes
+    libXi
+    libXrandr
+    libX11
+    libXcomposite
+    libxshmfence
+    libXtst
+    libxcb
+  ]);
 
 
 #    p.binutils         # provides `as`
