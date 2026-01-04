@@ -25,6 +25,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "buffer": "^6.0.3",
     "electron-updater": "^6.3.9",
+    "events": "^3.3.0",
     "node-carplay": "^4.1.0",
     "pinia": "^3.0.4",
     "socketmost": "3.0.1-alpha.87",
