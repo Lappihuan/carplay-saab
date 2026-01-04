@@ -5,7 +5,13 @@
 
   # everything you need at runtime AND to compile native modules:
   targetPkgs = p: [
+    p.libusb1
+    p.hidapi
+
     p.python3
+    p.gcc
+    p.gnumake
+    p.pkg-config
 
     p.libxcrypt-legacy
     p.zlib
@@ -24,6 +30,7 @@
     p.expat
     p.libxkbcommon
     p.systemd
+    p.systemd.dev
     p.alsa-lib
     p.libGL
 

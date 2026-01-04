@@ -5,8 +5,15 @@ import * as fs from 'fs'
 import { ExtraConfig, KeyBindings } from './Globals'
 import icon from '../../resources/icon.png?asset'
 
+// Import CarplayNode - handle both ESM and CommonJS
+const CarplayNodeModule = require('node-carplay/node') as any
+const CarplayNode = CarplayNodeModule.default || CarplayNodeModule
+
 let mainWindow: BrowserWindow | null = null
 let config: ExtraConfig | null = null
+let carplayNode: CarplayNode | null = null
+let carplayRunning = false
+
 const appPath: string = app.getPath('userData')
 const configPath: string = join(appPath, 'config.json')
 
@@ -67,6 +74,107 @@ const getSettings = (_: IpcMainEvent): void => {
   mainWindow?.webContents.send('settings', config)
 }
 
+const initCarplay = async (): Promise<void> => {
+  if (carplayRunning || !config) {
+    console.warn('CarPlay already running or config not loaded')
+    return
+  }
+
+  try {
+    carplayNode = new CarplayNode({
+      fps: config.fps,
+      width: config.width,
+      height: config.height,
+      iBoxVersion: config.iBoxVersion,
+      mediaDelay: config.mediaDelay,
+      phoneWorkMode: config.phoneWorkMode,
+      dpi: 1,
+      format: 0,
+      packetMax: 65500,
+      nightMode: false,
+      boxName: 'CarPlay SAAB',
+      hand: 0, // LHD
+      audioTransferMode: false,
+      wifiType: '2.4ghz',
+      micType: 'os',
+      phoneConfig: {}
+    })
+
+    // Setup message handler
+    carplayNode.onmessage = (message: any) => {
+      switch (message.type) {
+        case 'plugged':
+          console.log('CarPlay device plugged')
+          mainWindow?.webContents.send('carplay:plugged')
+          break
+        case 'unplugged':
+          console.log('CarPlay device unplugged')
+          mainWindow?.webContents.send('carplay:unplugged')
+          carplayRunning = false
+          break
+        case 'failure':
+          console.error('CarPlay initialization failed')
+          mainWindow?.webContents.send('carplay:failure')
+          carplayRunning = false
+          break
+        case 'video':
+          // Send video frames to renderer
+          if (message.message?.data) {
+            mainWindow?.webContents.send('carplay:video', {
+              buffer: Array.from(message.message.data),
+              width: message.message.width,
+              height: message.message.height
+            })
+          }
+          break
+        case 'audio':
+          // Send audio data to renderer
+          if (message.message?.data) {
+            mainWindow?.webContents.send('carplay:audio', {
+              buffer: Array.from(message.message.data),
+              sampleRate: message.message.sampleRate
+            })
+          }
+          break
+        case 'command':
+          // Send commands from phone (media controls, etc)
+          mainWindow?.webContents.send('carplay:command', message.message)
+          break
+      }
+    }
+
+    // Start CarPlay
+    await carplayNode.start()
+    carplayRunning = true
+  } catch (error) {
+    console.error('Failed to initialize CarPlay:', error)
+    mainWindow?.webContents.send('carplay:failure', error)
+    carplayRunning = false
+  }
+}
+
+const stopCarplay = async (): Promise<void> => {
+  if (!carplayNode || !carplayRunning) return
+
+  try {
+    await carplayNode.stop()
+    carplayNode = null
+    carplayRunning = false
+  } catch (error) {
+    console.error('Failed to stop CarPlay:', error)
+  }
+}
+
+const sendCarplayKey = (_: IpcMainEvent, key: string): void => {
+  if (!carplayNode) return
+  carplayNode.sendKey(key as any)
+}
+
+const sendCarplayTouch = (_: IpcMainEvent, data: { type: number; x: number; y: number }): void => {
+  if (!carplayNode) return
+  carplayNode.sendTouch(data)
+}
+
 function createWindow(): void {
   // Create the browser window.
   const win = new BrowserWindow({
@@ -92,6 +200,28 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // USB Device Permission Handlers
+  win.webContents.session.setPermissionCheckHandler(() => {
+    return true
+  })
+
+  win.webContents.session.setDevicePermissionHandler((details) => {
+    // Allow Carlinkit dongle (vendor ID 4884)
+    if (details.device.vendorId === 4884) {
+      return true
+    }
+    return false
+  })
+
+  // Auto-select Carlinkit USB device when requested
+  win.webContents.session.on('select-usb-device', (event, details, callback) => {
+    event.preventDefault()
+    const selectedDevice = details.deviceList.find((device) => {
+      return device.vendorId === 4884 && (device.productId === 5408 || device.productId === 5408)
+    })
+    callback(selectedDevice?.deviceId)
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -134,10 +264,17 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC handlers
+  // IPC handlers for settings
   ipcMain.on('get-settings', getSettings)
   ipcMain.on('save-settings', saveSettings)
   ipcMain.on('quit', () => app.quit())
+
+  // IPC handlers for CarPlay
+  ipcMain.on('carplay:start', () => initCarplay())
+  ipcMain.on('carplay:stop', () => stopCarplay())
+  ipcMain.on('carplay:key', sendCarplayKey)
+  ipcMain.on('carplay:touch', sendCarplayTouch)
+  ipcMain.handle('carplay:is-running', () => carplayRunning)
 
   createWindow()
 
@@ -146,6 +283,13 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('window-all-closed', async () => {
+  // Stop CarPlay before quitting
+  await stopCarplay()
+
+  if (process.platform !== 'darwin') app.quit()
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common

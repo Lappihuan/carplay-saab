@@ -24,6 +24,10 @@ const routes = [
     path: '/camera',
     component: Camera,
     name: 'Camera'
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/'
   }
 ]
 
